@@ -92,3 +92,60 @@ An alphabetic sequence from `x` to `y` inclusive, with optional increment.
 number.
 
 For compatibility reasons, the string `${` is not eligible for brace expansion.
+
+## Lazy expansion plans
+
+When an expansion is too large to build eagerly, or when only a few
+expansions are needed, compile the pattern into an `ExpansionPlan` instead.
+
+```js
+import { compile, expansionCount } from 'brace-expansion'
+
+const plan = compile('a{1..3}{x,y}')
+plan.total // 6n
+plan.take(3n, 2n) // ['a2y', 'a3x']
+```
+
+A plan uses exactly the same expansion rules and ordering as `expand`
+(nested option sets, Cartesian products, numeric/alphabetic sequences,
+steps, zero padding and escaped commas/braces). Patterns that do not form
+an expansion are still returned literally (`total === 1n`), and the empty
+string yields `0n`. Plans are not capped by the `expand` `max` option.
+
+### const plan = compile(str)
+
+Returns an `ExpansionPlan`. Compiling never enumerates expansions; the
+members of a sequence are reached by arithmetic, so compiling
+`{1..1000000000000}` or reading only its last two items does not walk the
+range.
+
+### plan.total
+
+Total number of expansions as a `bigint`, so counts above
+`Number.MAX_SAFE_INTEGER` stay exact.
+
+### expansionCount(str)
+
+Convenience accessor equal to `compile(str).total`.
+
+### const item = plan.at(index)
+
+Return the expansion at the zero-based `index`, which may be a `bigint` or
+a safe-integer `number`. Throws `RangeError` if `index` is not a safe
+integer/bigint or is outside `[0, total)`.
+
+### const items = plan.take(start, count?)
+
+Return up to `count` expansions beginning at the zero-based ordinal
+`start` (a `bigint` or safe-integer `number`). The result is clipped to
+`total`, so `start >= total` returns `[]` and a trailing window shorter
+than `count` is returned as-is. Omitting `count` returns all remaining
+expansions. Negative or non-integral arguments throw `RangeError`; a
+request larger than the maximum JavaScript array length also throws, in
+which case read a smaller window.
+
+```js
+const huge = compile('x{1..1000000000000}y')
+huge.total // 1000000000000n
+huge.take(999999999998n, 2n) // ['x999999999999y', 'x1000000000000y']
+```
